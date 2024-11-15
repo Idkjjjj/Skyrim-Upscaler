@@ -1,6 +1,9 @@
 #include "SettingGUI.h"
 #include <SkyrimUpscaler.h>
 
+void ProcessEvent(ImGuiKey key);
+class CharEvent;
+
 LRESULT WndProcHook::thunk(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	auto& io = ImGui::GetIO();
@@ -10,6 +13,7 @@ LRESULT WndProcHook::thunk(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	}
 	return func(hWnd, uMsg, wParam, lParam);
 }
+
 static inline const char* format_to_string(DXGI_FORMAT format)
 {
 	switch (format) {
@@ -30,7 +34,7 @@ static inline const char* format_to_string(DXGI_FORMAT format)
 	}
 }
 
-void ProcessEvent(ImGuiKey key);
+
 
 void SettingGUI::InitIMGUI(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D11DeviceContext* context)
 {
@@ -40,14 +44,12 @@ void SettingGUI::InitIMGUI(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
-	auto&    imgui_io = ImGui::GetIO();
 
-	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard;
-	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset;
+	io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard;
+	io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset;
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsLight();
 
 	DXGI_SWAP_CHAIN_DESC desc;
 	swapchain->GetDesc(&desc);
@@ -70,13 +72,13 @@ void SettingGUI::InitIMGUI(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D
 void SettingGUI::OnRender()
 {
 	if (REL::Module::IsVR()) {
-		ProcessEvent(mToggleHotkey);
+		ProcessEvent(static_cast<ImGuiKey>(mToggleHotkey));
 	}
-	
-	if (ImGui::IsKeyReleased(mToggleHotkey))
+
+	if (ImGui::IsKeyReleased(static_cast<ImGuiKey>(mToggleHotkey)))
 		toggle();
 
-	auto&  io = ImGui::GetIO();
+	auto& io = ImGui::GetIO();
 	io.MouseDrawCursor = mShowGUI;
 
 	// Start the Dear ImGui frame
@@ -95,15 +97,14 @@ void SettingGUI::OnRender()
 	}
 
 	if (mShowGUI) {
-		// Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-		ImGui::Begin("Skyrim Upscaler Settings", &mShowGUI, ImGuiWindowFlags_NoCollapse);  
-		//ImGui::SetWindowSize(ImVec2(576, 340), 0.9f);
+		ImGui::Begin("Skyrim Upscaler Settings", &mShowGUI, ImGuiWindowFlags_NoCollapse);
+
 		if (ImGui::Checkbox("Enable", &SkyrimUpscaler::GetSingleton()->mEnableUpscaler)) {
 			SkyrimUpscaler::GetSingleton()->SetEnabled(SkyrimUpscaler::GetSingleton()->mEnableUpscaler);
 		}
 		ImGui::Checkbox("Disable Evaluation", &SkyrimUpscaler::GetSingleton()->mDisableEvaluation);
 		ImGui::Checkbox("Jitter", &SkyrimUpscaler::GetSingleton()->mEnableJitter);
-		//ImGui::Checkbox("Enable Transparent Mask", &SkyrimUpscaler::GetSingleton()->mEnableTransparentMask);
+
 		if (ImGui::Checkbox("Sharpness", &SkyrimUpscaler::GetSingleton()->mSharpening)) {
 			SkyrimUpscaler::GetSingleton()->InitUpscaler();
 		}
@@ -117,41 +118,41 @@ void SettingGUI::OnRender()
 					SkyrimUpscaler::GetSingleton()->mMipLodBias = 0;
 			}
 		}
+
 		ImGui::BeginDisabled(SkyrimUpscaler::GetSingleton()->mUseOptimalMipLodBias);
 		ImGui::DragFloat("Mip Lod Bias", &SkyrimUpscaler::GetSingleton()->mMipLodBias, 0.1f, -3.0f, 3.0f);
 		ImGui::EndDisabled();
 
-		std::vector<const char*> imgui_combo_names{};
-		imgui_combo_names.push_back("DLSS");
-		imgui_combo_names.push_back("FSR2");
-		imgui_combo_names.push_back("XeSS");
-		imgui_combo_names.push_back("DLAA");
-		imgui_combo_names.push_back("TAA");
+		std::vector<const char*> imgui_combo_names{
+			"DLSS", "FSR2", "XeSS", "DLAA", "TAA"
+		};
 
-		if (ImGui::Combo("Upscale Type", (int*)&SkyrimUpscaler::GetSingleton()->mUpscaleType, imgui_combo_names.data(), imgui_combo_names.size())) {
-			if (SkyrimUpscaler::GetSingleton()->mUpscaleType < 0 || SkyrimUpscaler::GetSingleton()->mUpscaleType >= imgui_combo_names.size()) {
+		if (ImGui::Combo("Upscale Type", reinterpret_cast<int*>(&SkyrimUpscaler::GetSingleton()->mUpscaleType),
+				imgui_combo_names.data(), static_cast<int>(imgui_combo_names.size()))) {
+			if (SkyrimUpscaler::GetSingleton()->mUpscaleType < 0 ||
+				SkyrimUpscaler::GetSingleton()->mUpscaleType >= static_cast<int>(imgui_combo_names.size())) {
 				SkyrimUpscaler::GetSingleton()->mUpscaleType = 0;
 			}
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			SkyrimUpscaler::GetSingleton()->InitUpscaler();
 		}
-		const auto qualities = (SkyrimUpscaler::GetSingleton()->mUpscaleType == XESS) 
-			? "Performance\0Balanced\0Quality\0UltraQuality\0" 
-			: "Performance\0Balanced\0Quality\0UltraPerformance\0";
+
+		const char* qualities = (SkyrimUpscaler::GetSingleton()->mUpscaleType == XESS) ? "Performance\0Balanced\0Quality\0UltraQuality\0" : "Performance\0Balanced\0Quality\0UltraPerformance\0";
 
 		ImGui::BeginDisabled(SkyrimUpscaler::GetSingleton()->mUpscaleType == TAA);
-		if (ImGui::Combo("Quality Level", (int*)&SkyrimUpscaler::GetSingleton()->mQualityLevel, qualities)) {
+		if (ImGui::Combo("Quality Level", reinterpret_cast<int*>(&SkyrimUpscaler::GetSingleton()->mQualityLevel), qualities)) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			SkyrimUpscaler::GetSingleton()->InitUpscaler();
 		}
 
-		const auto w = (float)GetRenderWidth(0);
-		const auto h = (float)GetRenderHeight(0);
+		const auto w = static_cast<float>(GetRenderWidth(0));
+		const auto h = static_cast<float>(GetRenderHeight(0));
 
 		if (ImGui::DragFloat("MotionScale X", &SkyrimUpscaler::GetSingleton()->mMotionScale[0], 0.01f, -w, w) ||
 			ImGui::DragFloat("MotionScale Y", &SkyrimUpscaler::GetSingleton()->mMotionScale[1], 0.01f, -h, h)) {
-			SkyrimUpscaler::GetSingleton()->SetMotionScale(SkyrimUpscaler::GetSingleton()->mMotionScale[0], SkyrimUpscaler::GetSingleton()->mMotionScale[1]);
+			SkyrimUpscaler::GetSingleton()->SetMotionScale(SkyrimUpscaler::GetSingleton()->mMotionScale[0],
+				SkyrimUpscaler::GetSingleton()->mMotionScale[1]);
 		}
 		ImGui::EndDisabled();
 
@@ -162,18 +163,23 @@ void SettingGUI::OnRender()
 		if (sorted_item_list.empty()) {
 			ImGui::TextUnformatted("No motion vectors found.");
 		} else {
-			std::sort(sorted_item_list.begin(), sorted_item_list.end(), [](const motion_item& a, const motion_item& b) {
-				return (a.display_count > b.display_count) ||
-				       (a.display_count == b.display_count && ((a.desc.Width > b.desc.Width || (a.desc.Width == b.desc.Width && a.desc.Height > b.desc.Height)) ||
-																  (a.desc.Width == b.desc.Width && a.desc.Height == b.desc.Height && a.resource < b.resource)));
-			});
+			std::sort(sorted_item_list.begin(), sorted_item_list.end(),
+				[](const motion_item& a, const motion_item& b) {
+					return (a.display_count > b.display_count) ||
+				           (a.display_count == b.display_count &&
+							   ((a.desc.Width > b.desc.Width ||
+									(a.desc.Width == b.desc.Width && a.desc.Height > b.desc.Height)) ||
+								   (a.desc.Width == b.desc.Width &&
+									   a.desc.Height == b.desc.Height &&
+									   a.resource < b.resource)));
+				});
 
 			for (const motion_item& item : sorted_item_list) {
-				char label[512] = "";
-				sprintf_s(label, "%c 0x%016llx", ' ', item.resource);
+				char label[512];
+				snprintf(label, sizeof(label), "%c 0x%016llx", ' ', item.resource);
 
-				if (bool value = selected_item.resource == item.resource;
-					ImGui::Checkbox(label, &value)) {
+				bool value = selected_item.resource == item.resource;
+				if (ImGui::Checkbox(label, &value)) {
 					if (value) {
 						selected_item = item;
 						SkyrimUpscaler::GetSingleton()->SetupMotionVector(selected_item.resource);
@@ -190,28 +196,25 @@ void SettingGUI::OnRender()
 		ImGui::End();
 	}
 
-	// Rendering
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
 void SettingGUI::OnCleanup()
 {
-	// Cleanup
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 }
 
-// Codes below are from CatHub
-// https://github.com/Pentalimbed/cathub
 class CharEvent : public RE::InputEvent
 {
 public:
 	uint32_t keyCode;  // 18 (ascii code)
 };
 
-RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_eventSource)
+RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_event,
+	RE::BSTEventSource<RE::InputEvent*>*                                    a_eventSource)
 {
 	if (!a_event || !a_eventSource)
 		return RE::BSEventNotifyControl::kContinue;
@@ -228,35 +231,91 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
 
 			auto     scan_code = button->GetIDCode();
 			uint32_t key = MapVirtualKeyEx(scan_code, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+
 			switch (scan_code) {
-                case DIK_LEFTARROW: key = VK_LEFT; break;
-                case DIK_RIGHTARROW: key = VK_RIGHT; break;
-                case DIK_UPARROW: key = VK_UP; break;
-                case DIK_DOWNARROW: key = VK_DOWN; break;
-                case DIK_DELETE: key = VK_DELETE; break;
-                case DIK_END: key = VK_END; break;
-                case DIK_HOME: key = VK_HOME; break;   // pos1
-                case DIK_PRIOR: key = VK_PRIOR; break; // page up
-                case DIK_NEXT: key = VK_NEXT; break;   // page down
-                case DIK_INSERT: key = VK_INSERT; break;
-                case DIK_NUMPAD0: key = VK_NUMPAD0; break;
-                case DIK_NUMPAD1: key = VK_NUMPAD1; break;
-                case DIK_NUMPAD2: key = VK_NUMPAD2; break;
-                case DIK_NUMPAD3: key = VK_NUMPAD3; break;
-                case DIK_NUMPAD4: key = VK_NUMPAD4; break;
-                case DIK_NUMPAD5: key = VK_NUMPAD5; break;
-                case DIK_NUMPAD6: key = VK_NUMPAD6; break;
-                case DIK_NUMPAD7: key = VK_NUMPAD7; break;
-                case DIK_NUMPAD8: key = VK_NUMPAD8; break;
-                case DIK_NUMPAD9: key = VK_NUMPAD9; break;
-                case DIK_DECIMAL: key = VK_DECIMAL; break;
-                case DIK_NUMPADENTER: key = IM_VK_KEYPAD_ENTER; break;
-                case DIK_RMENU: key = VK_RMENU; break;       // right alt
-                case DIK_RCONTROL: key = VK_RCONTROL; break; // right control
-                case DIK_LWIN: key = VK_LWIN; break;         // left win
-                case DIK_RWIN: key = VK_RWIN; break;         // right win
-                case DIK_APPS: key = VK_APPS; break;
-                default: break;
+			case DIK_LEFTARROW:
+				key = VK_LEFT;
+				break;
+			case DIK_RIGHTARROW:
+				key = VK_RIGHT;
+				break;
+			case DIK_UPARROW:
+				key = VK_UP;
+				break;
+			case DIK_DOWNARROW:
+				key = VK_DOWN;
+				break;
+			case DIK_DELETE:
+				key = VK_DELETE;
+				break;
+			case DIK_END:
+				key = VK_END;
+				break;
+			case DIK_HOME:
+				key = VK_HOME;
+				break;
+			case DIK_PRIOR:
+				key = VK_PRIOR;
+				break;
+			case DIK_NEXT:
+				key = VK_NEXT;
+				break;
+			case DIK_INSERT:
+				key = VK_INSERT;
+				break;
+			case DIK_NUMPAD0:
+				key = VK_NUMPAD0;
+				break;
+			case DIK_NUMPAD1:
+				key = VK_NUMPAD1;
+				break;
+			case DIK_NUMPAD2:
+				key = VK_NUMPAD2;
+				break;
+			case DIK_NUMPAD3:
+				key = VK_NUMPAD3;
+				break;
+			case DIK_NUMPAD4:
+				key = VK_NUMPAD4;
+				break;
+			case DIK_NUMPAD5:
+				key = VK_NUMPAD5;
+				break;
+			case DIK_NUMPAD6:
+				key = VK_NUMPAD6;
+				break;
+			case DIK_NUMPAD7:
+				key = VK_NUMPAD7;
+				break;
+			case DIK_NUMPAD8:
+				key = VK_NUMPAD8;
+				break;
+			case DIK_NUMPAD9:
+				key = VK_NUMPAD9;
+				break;
+			case DIK_DECIMAL:
+				key = VK_DECIMAL;
+				break;
+			case DIK_NUMPADENTER:
+				key = IM_VK_KEYPAD_ENTER;
+				break;
+			case DIK_RMENU:
+				key = VK_RMENU;
+				break;
+			case DIK_RCONTROL:
+				key = VK_RCONTROL;
+				break;
+			case DIK_LWIN:
+				key = VK_LWIN;
+				break;
+			case DIK_RWIN:
+				key = VK_RWIN;
+				break;
+			case DIK_APPS:
+				key = VK_APPS;
+				break;
+			default:
+				break;
 			}
 
 			switch (button->device.get()) {
@@ -274,7 +333,6 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
 				break;
 			case RE::INPUT_DEVICE::kGamepad:
 				// not implemented yet
-				// key = GetGamepadIndex((RE::BSWin32GamepadDevice::Key)key);
 				break;
 			default:
 				continue;
@@ -287,13 +345,13 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
 
 void ProcessEvent(ImGuiKey key)
 {
-	auto& io = ImGui::GetIO();
+	auto&       io = ImGui::GetIO();
 	static bool leftButton = false;
-	if (GetAsyncKeyState(VK_LBUTTON) < 0 && leftButton == false) {
+
+	if (GetAsyncKeyState(VK_LBUTTON) < 0 && !leftButton) {
 		leftButton = true;
 		io.AddMouseButtonEvent(0, leftButton);
-	}
-	if (GetAsyncKeyState(VK_LBUTTON) == 0 && leftButton == true) {
+	} else if (GetAsyncKeyState(VK_LBUTTON) == 0 && leftButton) {
 		leftButton = false;
 		io.AddMouseButtonEvent(0, leftButton);
 	}
@@ -301,10 +359,9 @@ void ProcessEvent(ImGuiKey key)
 	auto vkey = ImGuiKeyToVirtualKey(key);
 
 	static bool pressed = false;
-	if (GetAsyncKeyState(vkey) < 0 && pressed == false) {
+	if (GetAsyncKeyState(vkey) < 0 && !pressed) {
 		pressed = true;
-	}
-	if (GetAsyncKeyState(vkey) == 0 && pressed == true) {
+	} else if (GetAsyncKeyState(vkey) == 0 && pressed) {
 		pressed = false;
 		SettingGUI::GetSingleton()->toggle();
 	}
